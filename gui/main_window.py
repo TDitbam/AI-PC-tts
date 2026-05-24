@@ -75,42 +75,54 @@ class JarvisGUI(ctk.CTk):
         # Settings Tab
         self.tabview.tab("Settings").grid_columnconfigure(1, weight=1)
 
+        # AI Model
+        ctk.CTkLabel(self.tabview.tab("Settings"), text="AI Model:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        self.model_entry = ctk.CTkEntry(self.tabview.tab("Settings"))
+        self.model_entry.insert(0, self.orchestrator.config.get("AI", "model"))
+        self.model_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+        self.model_entry.bind("<FocusOut>", lambda e: self._update_ai_config())
+
         # TTS Voice
-        ctk.CTkLabel(self.tabview.tab("Settings"), text="TTS Voice:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        ctk.CTkLabel(self.tabview.tab("Settings"), text="TTS Voice:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
         self.voice_dropdown = ctk.CTkOptionMenu(
             self.tabview.tab("Settings"),
             values=["th-TH-PremwadeeNeural", "th-TH-NiwatNeural", "en-US-AriaNeural", "en-US-GuyNeural"],
             command=self._update_tts_config
         )
-        self.voice_dropdown.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+        self.voice_dropdown.set(self.orchestrator.config.get("TTS", "voice"))
+        self.voice_dropdown.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
         # Auto Translate
-        ctk.CTkLabel(self.tabview.tab("Settings"), text="Auto Translate:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        ctk.CTkLabel(self.tabview.tab("Settings"), text="Auto Translate:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
         self.translate_switch = ctk.CTkSwitch(
             self.tabview.tab("Settings"),
             text="Off/On",
             command=self._update_tts_config
         )
-        self.translate_switch.grid(row=1, column=1, padx=10, pady=10, sticky="w")
+        if self.orchestrator.config.get("TTS", "auto_translate") == "True":
+            self.translate_switch.select()
+        self.translate_switch.grid(row=2, column=1, padx=10, pady=10, sticky="w")
 
         # Delay Per Char
-        ctk.CTkLabel(self.tabview.tab("Settings"), text="Delay/Char (s):").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+        ctk.CTkLabel(self.tabview.tab("Settings"), text="Delay/Char (s):").grid(row=3, column=0, padx=10, pady=10, sticky="w")
         self.delay_slider = ctk.CTkSlider(
             self.tabview.tab("Settings"),
             from_=0, to=0.2,
             command=lambda v: self._update_tts_config()
         )
-        self.delay_slider.set(0.03)
-        self.delay_slider.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
+        self.delay_slider.set(float(self.orchestrator.config.get("TTS", "delay_per_char")))
+        self.delay_slider.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
 
         # Always Listen
-        ctk.CTkLabel(self.tabview.tab("Settings"), text="Always Listen:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
+        ctk.CTkLabel(self.tabview.tab("Settings"), text="Always Listen:").grid(row=4, column=0, padx=10, pady=10, sticky="w")
         self.always_listen_switch = ctk.CTkSwitch(
             self.tabview.tab("Settings"),
             text="Off/On (Skip Wake Word)",
             command=self._update_stt_config
         )
-        self.always_listen_switch.grid(row=3, column=1, padx=10, pady=10, sticky="w")
+        if self.orchestrator.config.get("STT", "always_listen") == "True":
+            self.always_listen_switch.select()
+        self.always_listen_switch.grid(row=4, column=1, padx=10, pady=10, sticky="w")
 
         self._current_ai_msg = ""
         self._ai_is_typing = False
@@ -126,6 +138,7 @@ class JarvisGUI(ctk.CTk):
 
     def _start_jarvis(self):
         """Start the orchestrator."""
+        self.start_btn.configure(state="disabled") # Immediate feedback
         asyncio.run_coroutine_threadsafe(
             self.orchestrator.start(),
             self.loop
@@ -133,6 +146,7 @@ class JarvisGUI(ctk.CTk):
 
     def _stop_jarvis(self):
         """Stop the orchestrator."""
+        self.stop_btn.configure(state="disabled") # Immediate feedback
         asyncio.run_coroutine_threadsafe(
             self.orchestrator.stop(),
             self.loop
@@ -152,7 +166,15 @@ class JarvisGUI(ctk.CTk):
 
     def _on_device_changed(self, selected_name):
         device_id = int(selected_name.split(":")[0])
+        self.orchestrator.config.set("AUDIO", "device_id", str(device_id))
         self.orchestrator.change_audio_device(device_id)
+
+    def _update_ai_config(self):
+        model = self.model_entry.get().strip()
+        if model:
+            self.orchestrator.config.set("AI", "model", model)
+            self.orchestrator.ai_client.model = model
+            logger.info(f"AI Model updated to: {model}")
 
     def _update_tts_config(self, *args):
         config = {
@@ -160,11 +182,16 @@ class JarvisGUI(ctk.CTk):
             "auto_translate": "True" if self.translate_switch.get() else "False",
             "delay_per_char": str(self.delay_slider.get())
         }
+        self.orchestrator.config.set("TTS", "voice", config["voice"])
+        self.orchestrator.config.set("TTS", "auto_translate", config["auto_translate"])
+        self.orchestrator.config.set("TTS", "delay_per_char", config["delay_per_char"])
         self.orchestrator.tts.update_config(config)
 
     def _update_stt_config(self, *args):
-        self.orchestrator.stt.always_listen = self.always_listen_switch.get()
-        logger.info(f"STT Always Listen: {self.orchestrator.stt.always_listen}")
+        val = self.always_listen_switch.get()
+        self.orchestrator.stt.always_listen = val
+        self.orchestrator.config.set("STT", "always_listen", "True" if val else "False")
+        logger.info(f"STT Always Listen: {val}")
 
     def _test_tts(self):
         """Manually trigger a TTS test."""

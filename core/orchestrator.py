@@ -3,6 +3,7 @@ import asyncio
 from typing import Dict, Any, List, Optional
 import logging
 from core.event_bus import EventBus
+from core.config_manager import ConfigManager
 from ai.ollama_client import OllamaClient
 from memory.memory_manager import MemoryManager
 from commands.command_router import CommandRouter, get_time_handler, weather_handler
@@ -20,15 +21,34 @@ class JarvisOrchestrator:
     Main orchestrator for Jarvis AI Assistant.
     """
     def __init__(self):
+        self.config = ConfigManager()
         self.event_bus = EventBus()
-        self.ai_client = OllamaClient()
+        
+        # Load settings from config
+        ai_model = self.config.get("AI", "model")
+        ai_url = self.config.get("AI", "base_url")
+        self.ai_client = OllamaClient(model=ai_model, base_url=ai_url)
+        
         self.memory = MemoryManager()
         self.router = CommandRouter()
-        self.audio = AudioManager()
-        self.stt = STTManager()
+        
+        device_id = int(self.config.get("AUDIO", "device_id", fallback="-1"))
+        self.audio = AudioManager(device_id=None if device_id == -1 else device_id)
+        
+        stt_lang = self.config.get("STT", "language")
+        self.stt = STTManager(language=stt_lang)
+        self.stt.always_listen = self.config.get("STT", "always_listen") == "True"
+        
         self.tts = TTSManager()
+        # Sync TTS config
+        self.tts.update_config({
+            "voice": self.config.get("TTS", "voice"),
+            "auto_translate": self.config.get("TTS", "auto_translate"),
+            "delay_per_char": self.config.get("TTS", "delay_per_char")
+        })
         
         self.is_running = False
+        self._lock = asyncio.Lock() # To prevent concurrent start/stop
 
         self._setup_commands()
         self._setup_event_handlers()
@@ -45,50 +65,49 @@ class JarvisOrchestrator:
 
     async def start(self):
         """Start Jarvis."""
-        if self.is_running:
-            logger.warning("Jarvis is already running.")
-            return
+        async with self._lock:
+            if self.is_running:
+                logger.debug("Jarvis is already running.")
+                return
 
-        logger.info("Jarvis starting...")
-        self.is_running = True
-        
-        # Capture the current event loop for use in callbacks from other threads
-        self.loop = asyncio.get_running_loop()
-        
-        # Enable Always Listen mode by default as requested
-        self.stt.always_listen = True
-        
-        try:
-            self.audio.start_recording()
+            logger.info("Jarvis starting...")
             
-            def stt_callback(text):
-                if not self.is_running:
-                    return
-                    
-                # Use the captured loop to emit the event safely from the STT thread
-                self.loop.call_soon_threadsafe(
-                    lambda: asyncio.create_task(self.event_bus.emit("user_speech", text))
-                )
+            # Capture the current event loop for use in callbacks from other threads
+            self.loop = asyncio.get_running_loop()
+            
+            try:
+                self.audio.start_recording()
                 
-            self.stt.transcribe_stream(self.audio.input_queue, stt_callback)
-            await self.event_bus.emit("system_status", "Active")
-            logger.info("Jarvis is ready and listening.")
-        except Exception as e:
-            logger.error(f"Failed to start Jarvis: {e}")
-            self.is_running = False
-            await self.event_bus.emit("system_status", "Error")
+                def stt_callback(text):
+                    if not self.is_running:
+                        return
+                        
+                    # Use the captured loop to emit the event safely from the STT thread
+                    self.loop.call_soon_threadsafe(
+                        lambda: asyncio.create_task(self.event_bus.emit("user_speech", text))
+                    )
+                    
+                self.stt.transcribe_stream(self.audio.input_queue, stt_callback)
+                self.is_running = True
+                await self.event_bus.emit("system_status", "Active")
+                logger.info("Jarvis is ready and listening.")
+            except Exception as e:
+                logger.error(f"Failed to start Jarvis: {e}")
+                self.is_running = False
+                await self.event_bus.emit("system_status", "Error")
 
     async def stop(self):
         """Stop Jarvis."""
-        if not self.is_running:
-            return
+        async with self._lock:
+            if not self.is_running:
+                return
 
-        logger.info("Jarvis stopping...")
-        self.is_running = False
-        self.audio.stop_recording()
-        self.stt.stop()
-        await self.event_bus.emit("system_status", "Stopped")
-        logger.info("Jarvis stopped.")
+            logger.info("Jarvis stopping...")
+            self.is_running = False
+            self.audio.stop_recording()
+            self.stt.stop()
+            await self.event_bus.emit("system_status", "Stopped")
+            logger.info("Jarvis stopped.")
 
     def change_audio_device(self, device_id: int):
         """Change the active audio input device."""
