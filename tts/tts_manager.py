@@ -29,9 +29,17 @@ class TTSManager:
         Convert text to speech using the engine's queue.
         """
         logger.info(f"TTS Request: {text}")
-        # ChatTTSEngine uses a queue and background threads
         self.engine.msg_queue.put(text)
         
+    def update_config(self, new_config: Dict[str, Any]):
+        """Update the engine's configuration."""
+        self.config.update(new_config)
+        self.engine.voice = self.config.get("voice", self.engine.voice)
+        self.engine.delay_per_char = float(self.config.get("delay_per_char", self.engine.delay_per_char))
+        self.engine.max_delay = float(self.config.get("max_delay", self.engine.max_delay))
+        self.engine.auto_translate = self.config.get("auto_translate") == "True"
+        logger.info(f"TTS Config updated: {self.config}")
+
     def stop(self):
         """Stop the engine."""
         self.engine.stop()

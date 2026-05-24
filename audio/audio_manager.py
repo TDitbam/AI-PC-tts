@@ -11,10 +11,11 @@ class AudioManager:
     """
     Manages audio recording and playback using a queue-based pipeline.
     """
-    def __init__(self, sample_rate: int = 16000, channels: int = 1, block_size: int = 1024):
+    def __init__(self, sample_rate: int = 16000, channels: int = 1, block_size: int = 1024, device_id: Optional[int] = None):
         self.sample_rate = sample_rate
         self.channels = channels
         self.block_size = block_size
+        self.device_id = device_id
         
         self.input_queue = queue.Queue()
         self.output_queue = queue.Queue()
@@ -35,7 +36,7 @@ class AudioManager:
         self.is_recording = True
         self._recording_thread = threading.Thread(target=self._record_worker, daemon=True)
         self._recording_thread.start()
-        logger.info("Audio recording started.")
+        logger.info(f"Audio recording started on device {self.device_id if self.device_id is not None else 'default'}")
 
     def stop_recording(self):
         """Stop the audio recording thread."""
@@ -51,17 +52,22 @@ class AudioManager:
             if status:
                 logger.warning(f"Audio record status: {status}")
             if self.is_recording:
+                # Basic signal level check
+                rms = np.sqrt(np.mean(indata**2))
+                if rms > 0.01: 
+                    logger.info(f"Audio level: {rms:.4f}")
                 self.input_queue.put(indata.copy())
 
         try:
             with sd.InputStream(samplerate=self.sample_rate, 
                                 channels=self.channels, 
                                 callback=callback, 
-                                blocksize=self.block_size):
+                                blocksize=self.block_size,
+                                device=self.device_id):
                 while not self._stop_event.is_set() and self.is_recording:
                     self._stop_event.wait(0.1)
         except Exception as e:
-            logger.exception("Error in recording worker")
+            logger.error(f"Error in recording worker: {e}")
             self.is_recording = False
 
     def play_audio(self, data: np.ndarray):

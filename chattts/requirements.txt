@@ -1,0 +1,8 @@
+pytchat
+edge-tts
+pygame
+customtkinter
+pyinstaller
+gTTS
+TikTokLive
+deep-translator

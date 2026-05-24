@@ -19,8 +19,6 @@ from .tiktok_chat import tiktok_collector
 
 logger = get_logger("Engine")
 
-from pygame import mixer
-
 class ChatTTSEngine:
     def __init__(self):
         self.is_running = False
@@ -49,10 +47,9 @@ class ChatTTSEngine:
                 os.makedirs(d)
 
     def _init_mixer(self):
-        """Initialize pygame mixer optimized for edge-tts (24000Hz)."""
+        """Initialize pygame mixer."""
         try:
-            mixer.init(frequency=24000)
-            logger.info("Pygame mixer initialized at 24000Hz")
+            mixer.init()
         except Exception as e:
             logger.error(f"Failed to initialize pygame mixer: {e}")
 
@@ -142,21 +139,15 @@ class ChatTTSEngine:
                 if not processed_text:
                     continue
 
-                path = os.path.abspath(os.path.join(self.audio_dir, f"{int(time.time()*1000)}.mp3"))
-                logger.info(f"Generating audio for: {processed_text}")
+                path = os.path.join(self.audio_dir, f"{int(time.time()*1000)}.mp3")
                 
                 try:
                     await self._generate_audio(processed_text, path)
-                    if os.path.exists(path) and os.path.getsize(path) > 0:
-                        logger.info(f"Audio generated successfully: {path}")
-                        self.audio_queue.put((path, len(processed_text)), timeout=1.0)
-                    else:
-                        logger.error(f"Audio file is empty or missing: {path}")
+                    self.audio_queue.put((path, len(processed_text)), timeout=1.0)
                 except queue.Full:
                     logger.warning("Audio queue full, dropping message.")
                     if os.path.exists(path): os.remove(path)
-                except Exception as e:
-                    logger.error(f"Generation failed: {e}")
+                except Exception:
                     continue
 
             except Exception as e:
@@ -164,8 +155,8 @@ class ChatTTSEngine:
                 await asyncio.sleep(1)
 
     def player_loop(self):
-        """Main player loop: play generated audio files using pygame."""
-        logger.info("Player started (Pygame Mode)")
+        """Main player loop: play generated audio files."""
+        logger.info("Player started")
         while self.is_running:
             try:
                 try:
@@ -175,35 +166,20 @@ class ChatTTSEngine:
 
                 if os.path.exists(path):
                     try:
-                        logger.info(f"Playing audio: {path}")
-                        if not mixer.get_init():
-                            self._init_mixer()
-                        
+                        logger.info(f"Playing: {path}")
                         mixer.music.load(path)
                         mixer.music.play()
-                        
-                        # Wait for playback to finish
                         while mixer.music.get_busy() and self.is_running:
                             time.sleep(0.1)
+                        mixer.music.unload()
                         
-                        mixer.music.stop()
-                        mixer.music.unload() # Crucial: release the file
-                        
-                        logger.info(f"Playback finished: {path}")
                         time.sleep(min(char_count * self.delay_per_char, self.max_delay))
                     except Exception as e: 
-                        logger.error(f"Play Error for {path}: {e}")
+                        logger.error(f"Play Error: {e}")
                     finally:
                         try:
-                            # Small delay to ensure OS releases the file handle
-                            time.sleep(0.1)
-                            if os.path.exists(path): 
-                                os.remove(path)
-                                logger.info(f"Removed temp file: {path}")
-                        except Exception as re:
-                            logger.error(f"Failed to remove {path}: {re}")
-                else:
-                    logger.error(f"Audio file missing: {path}")
+                            if os.path.exists(path): os.remove(path)
+                        except: pass
             except Exception as e: 
                 logger.error(f"Player Loop Error: {e}")
 

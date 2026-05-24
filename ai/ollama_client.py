@@ -17,7 +17,7 @@ class OllamaClient:
 
     async def stream_chat(self, messages: List[Dict[str, str]]) -> AsyncGenerator[str, None]:
         """
-        Stream chat responses from Ollama.
+        Stream chat responses from Ollama with retry logic.
         """
         payload = {
             "model": self.model,
@@ -25,25 +25,39 @@ class OllamaClient:
             "stream": True
         }
         
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(self.api_chat, json=payload) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(f"Ollama error: {response.status} - {error_text}")
-                        yield f"Error: {response.status}"
-                        return
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(self.api_chat, json=payload, timeout=30) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            logger.error(f"Ollama error (Attempt {attempt+1}): {response.status} - {error_text}")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(retry_delay)
+                                continue
+                            yield f"Error: {response.status}. Please check if Ollama is running."
+                            return
 
-                    async for line in response.content:
-                        if line:
-                            chunk = json.loads(line)
-                            if "message" in chunk and "content" in chunk["message"]:
-                                yield chunk["message"]["content"]
-                            if chunk.get("done"):
-                                break
-        except Exception as e:
-            logger.exception("Failed to connect to Ollama")
-            yield f"Connection Error: {str(e)}"
+                        async for line in response.content:
+                            if line:
+                                try:
+                                    chunk = json.loads(line)
+                                    if "message" in chunk and "content" in chunk["message"]:
+                                        yield chunk["message"]["content"]
+                                    if chunk.get("done"):
+                                        return
+                                except json.JSONDecodeError:
+                                    continue
+                return # Success
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                logger.warning(f"Connection attempt {attempt+1} failed: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                else:
+                    yield f"Connection Error: Could not connect to Ollama after {max_retries} attempts."
 
     async def generate(self, prompt: str) -> str:
         """
@@ -57,7 +71,7 @@ class OllamaClient:
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.api_generate, json=payload) as response:
+                async with session.post(self.api_generate, json=payload, timeout=10) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"Ollama error: {response.status} - {error_text}")

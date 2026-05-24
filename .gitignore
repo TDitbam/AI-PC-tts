@@ -9,3 +9,11 @@ ENV/
 .pytest_cache/
 .vscode/
 .idea/
+
+# Jarvis Specific
+temp_audio/
+msg_queue/
+chattts/dist/
+chattts/build/
+*.zip
+*.spec
