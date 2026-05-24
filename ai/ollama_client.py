@@ -1,5 +1,6 @@
 import aiohttp
 import json
+import asyncio
 from typing import AsyncGenerator, Dict, List, Optional
 import logging
 
@@ -9,7 +10,7 @@ class OllamaClient:
     """
     Client for interacting with Ollama API.
     """
-    def __init__(self, model: str = "qwen3:8b", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: str = "qwen2:7b", base_url: str = "http://localhost:11434"):
         self.model = model
         self.base_url = base_url
         self.api_generate = f"{self.base_url}/api/generate"
