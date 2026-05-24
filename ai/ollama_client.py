@@ -10,7 +10,7 @@ class OllamaClient:
     """
     Client for interacting with Ollama API.
     """
-    def __init__(self, model: str = "gemma2:9b", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: str = "gemma4", base_url: str = "http://localhost:11434"):
         self.model = model
         self.base_url = base_url
         self.api_generate = f"{self.base_url}/api/generate"
