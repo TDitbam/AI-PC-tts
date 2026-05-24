@@ -59,8 +59,8 @@ class STTManager:
         sample_width = 2 # 16-bit
         
         # We accumulate chunks until we have enough for recognition
-        # reduced accumulation size for faster response (approx 0.8 - 1.0s)
-        target_samples = 14000 
+        # reduced accumulation size for faster response (approx 1.5s)
+        target_samples = 24000 
         
         logger.info("STT Worker is active.")
         

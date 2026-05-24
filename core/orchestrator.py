@@ -52,6 +52,9 @@ class JarvisOrchestrator:
         logger.info("Jarvis starting...")
         self.is_running = True
         
+        # Capture the current event loop for use in callbacks from other threads
+        self.loop = asyncio.get_running_loop()
+        
         # Enable Always Listen mode by default as requested
         self.stt.always_listen = True
         
@@ -62,16 +65,10 @@ class JarvisOrchestrator:
                 if not self.is_running:
                     return
                     
-                # Use the loop from the thread where the orchestrator was started
-                try:
-                    loop = asyncio.get_running_loop()
-                    asyncio.run_coroutine_threadsafe(
-                        self.event_bus.emit("user_speech", text), 
-                        loop
-                    )
-                except RuntimeError:
-                    # Fallback for when loop isn't easily accessible
-                    pass
+                # Use the captured loop to emit the event safely from the STT thread
+                self.loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self.event_bus.emit("user_speech", text))
+                )
                 
             self.stt.transcribe_stream(self.audio.input_queue, stt_callback)
             await self.event_bus.emit("system_status", "Active")
