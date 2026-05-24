@@ -25,15 +25,10 @@ if __name__ == "__main__":
     if "--gui" in sys.argv:
         try:
             from gui.main_window import run_gui
-            # Running GUI requires its own event loop management
-            # This is a simplified integration
+            setup_logging()
             orchestrator = JarvisOrchestrator()
-            # We need to start orchestrator in a background thread or properly integrate loops
-            # For now, we'll just show how it would be called.
-            logger = logging.getLogger("Jarvis")
-            logger.warning("GUI integration is a prototype and may require 'qasync' for full async support.")
-            # run_gui(orchestrator) 
-        except ImportError as e:
-            print(f"Failed to load GUI: {e}. Ensure PySide6 is installed.")
+            run_gui(orchestrator) 
+        except Exception as e:
+            print(f"Failed to load GUI: {e}")
     else:
         asyncio.run(main())

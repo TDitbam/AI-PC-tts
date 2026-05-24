@@ -1,6 +1,6 @@
 import os
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
 from core.event_bus import EventBus
 from ai.ollama_client import OllamaClient

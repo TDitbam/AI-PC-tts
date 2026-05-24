@@ -1,31 +1,37 @@
 import logging
 import asyncio
-from typing import Optional
+from typing import Optional, Dict, Any
+from .tts_engine import ChatTTSEngine
 
 logger = logging.getLogger(__name__)
 
 class TTSManager:
     """
-    Wrapper for Text-to-Speech engines.
+    Wrapper for the ChatTTSEngine.
     """
-    def __init__(self, engine_type: str = "placeholder"):
+    def __init__(self, engine_type: str = "chat_tts"):
         self.engine_type = engine_type
-        # In a real scenario, initialize the specific TTS engine here
-        logger.info(f"TTS Manager initialized with type: {engine_type}")
+        self.engine = ChatTTSEngine()
+        
+        # Default config for the engine
+        self.config = {
+            "voice": "th-TH-PremwadeeNeural",
+            "delay_per_char": 0.03,
+            "max_delay": 2.0,
+            "auto_translate": "False"
+        }
+        
+        self.engine.start(self.config)
+        logger.info(f"TTS Manager initialized with ChatTTSEngine")
 
     async def speak(self, text: str):
         """
-        Convert text to speech and play it.
+        Convert text to speech using the engine's queue.
         """
-        logger.info(f"TTS Speaking: {text}")
+        logger.info(f"TTS Request: {text}")
+        # ChatTTSEngine uses a queue and background threads
+        self.engine.msg_queue.put(text)
         
-        if self.engine_type == "placeholder":
-            # Simulate speaking time
-            await asyncio.sleep(len(text) * 0.05)
-        elif self.engine_type == "system":
-            # Example using a system command (Windows)
-            # import os
-            # os.system(f'powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak(\'{text}\')"')
-            pass
-        
-        logger.debug("TTS finished speaking.")
+    def stop(self):
+        """Stop the engine."""
+        self.engine.stop()
