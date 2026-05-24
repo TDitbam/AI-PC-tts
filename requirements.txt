@@ -1,0 +1,12 @@
+asyncio
+aiohttp
+pytest
+pytest-asyncio
+PySide6
+faster-whisper
+sounddevice
+numpy
+scipy
+ollama
+pydantic
+python-dotenv
