@@ -59,8 +59,8 @@ class STTManager:
         sample_width = 2 # 16-bit
         
         # We accumulate chunks until we have enough for recognition
-        # reduced accumulation size for faster response (approx 1.0 - 1.2s)
-        target_samples = 18000 
+        # reduced accumulation size for faster response (approx 0.8 - 1.0s)
+        target_samples = 14000 
         
         logger.info("STT Worker is active.")
         
@@ -75,14 +75,15 @@ class STTManager:
                     raw_data = np.concatenate(audio_buffer).flatten()
                     audio_buffer = []
                     
-                    # More sensitive threshold for "Always Listen"
+                    # Even more sensitive threshold for "Always Listen"
                     rms = np.sqrt(np.mean(raw_data**2))
-                    threshold = 0.003 if self.always_listen else 0.005
+                    threshold = 0.0015 if self.always_listen else 0.004
                     
                     if rms < threshold:
+                        logger.debug(f"Audio chunk skipped: RMS {rms:.5f} below threshold {threshold}")
                         continue
                     
-                    logger.debug(f"Processing audio chunk, RMS: {rms:.5f}")
+                    logger.info(f"Processing audio chunk, RMS: {rms:.5f}")
                     
                     try:
                         int_data = (raw_data * 32767).astype(np.int16).tobytes()
